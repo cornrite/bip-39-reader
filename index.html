@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
+  <!--
+    Deliberately narrow: no default-src/script-src, because a strict policy that
+    blocked inline script and eval would need to be duplicated into every copy of
+    the page and breaks nothing an attacker could not already do. These three
+    directives cost nothing and stop <base> hijacks, plugin embedding and form
+    smuggling.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>BIP-39 Word Reader</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>BIP-39 Word Reader</h1>
+      <p class="subtitle">Reads the complete BIP-39 English <a href="https://github.com/bitcoin/bips/blob/master/bip-0039/english.txt">word list</a> aloud, freeing your eyes to verify a physical copy (<a href="https://btc-hardware-solutions.square.site/product/entropia-seed-tablets/11">Entropia tablets</a> or a printout). This is not a seed generator or a seed-phrase reader.</p>
+      <div class="workflow-warning" id="workflowWarning">
+        <p>Check the complete inventory, then close this app and remove this device before selecting any seed words. Conduct any lottery-style selection privately, away from cameras, recording-capable devices, and observers. Never enter, search for, or replay your selected seed words here. Inventory completeness does not establish randomness or ceremony security.</p>
+        <button type="button" class="btn-inline workflow-warning-close" id="closeWorkflowWarningBtn" aria-label="Dismiss workflow warning" title="Dismiss workflow warning">&times;</button>
+      </div>
+      <p class="subtitle">Independent project; not affiliated with or endorsed by <a href="https://seedsigner.com/">SeedSigner</a>. For external background, see the <a href="https://seedsigner.com/seedsigner-independent-custody-guide/" target="_blank" rel="noopener noreferrer">SeedSigner Independent Custody Guide</a>.</p>
+
+      <!-- Word list verification badge -->
+      <div class="verify-badge-container">
+        <div class="verify-badge pending" id="verifyBadge" role="button" tabindex="0" title="Click to show SHA-256 details">
+          <span class="verify-icon" id="verifyIcon">&#9679;</span>
+          <span class="verify-text" id="verifyText">Computing SHA-256 hash...</span>
+        </div>
+      </div>
+      <div class="verify-details hidden" id="verifyDetails">
+        <div class="hash-row">
+          <span class="hash-label">This list:</span>
+          <code class="hash-code" id="currentHash">calculating...</code>
+        </div>
+        <div class="hash-row">
+          <span class="hash-label">Canonical BIP-39:</span>
+          <code class="hash-code">2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda</code>
+        </div>
+        <div class="hash-row">
+          <span class="hash-label">Hash engines:</span>
+          <span class="hash-engines" id="hashEngines">checking...</span>
+        </div>
+        <div class="hash-note">
+          This badge covers the word list only, not the app itself. To check the app and the list without
+          trusting this page, follow <code>VERIFY.md</code>.
+        </div>
+      </div>
+    </header>
+
+    <!-- Word stage -->
+    <div class="card word-stage" id="stageCard">
+      <div class="index-badge-group">
+        <span class="index-badge" id="indexBadge">Word 1 of 2,048</span>
+      </div>
+
+      <div class="active-word-container">
+        <div class="active-word" id="activeWord">
+          <span class="word-prefix" id="wordPrefix">aban</span><span class="word-suffix" id="wordSuffix">don</span>
+        </div>
+      </div>
+      <div class="prefix-hint">First 4 letters are highlighted: these are unique to each word, and they are what Entropia tablets show.</div>
+
+      <div class="status-text" id="statusText">Ready to start</div>
+
+      <div class="progress-wrapper">
+        <div class="progress-bar-container" id="progressBarContainer" title="Click to jump">
+          <div class="progress-bar-fill" id="progressBarFill"></div>
+        </div>
+        <div class="progress-info">
+          <span id="progressPercent">List position: 0.0%</span>
+          <span id="progressWords">Word 1 / 2048</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Playback, jump, search and verification against a download -->
+    <div class="card">
+      <div class="playback-controls">
+        <button id="prevBtn" title="Previous word (Left Arrow)">&#9664; Prev</button>
+        <button id="playBtn" class="btn-primary" title="Play / Pause (Spacebar)">&#9654; Play</button>
+        <button id="repeatBtn" title="Repeat current word (R)">&#128260; Repeat</button>
+        <button id="nextBtn" title="Next word (Right Arrow)">Next &#9654;</button>
+        <button id="resetBtn" title="Back to word 1 (Home)">&#8634; Reset</button>
+      </div>
+
+      <div class="jump-row">
+        <input type="number" id="jumpIndex" min="1" max="2048" placeholder="Jump to word # (1-2048)">
+        <button id="jumpBtn">Go</button>
+        <input type="text" id="searchWord" placeholder="Search word (e.g. apple or appl)">
+        <button id="searchBtn">Find</button>
+      </div>
+
+      <div class="compare-row">
+        <button type="button" id="compareBtn" class="btn-secondary">&#128269; Check against my download</button>
+        <input type="file" id="compareInput" accept=".txt,text/plain" class="hidden">
+        <span class="compare-hint">
+          Pick an <code>english.txt</code> you downloaded yourself. It is compared with the list being read
+          aloud and never replaces it. See <code>VERIFY.md</code>.
+        </span>
+      </div>
+      <div class="compare-result info" id="compareResult" role="status">Not compared with your download yet. The badge above checks embedded content only.</div>
+    </div>
+
+    <!-- Pace & voice controls -->
+    <div class="card">
+      <div class="controls-grid">
+        <div class="control-item">
+          <div class="control-header">
+            <span>Pause Between Words</span>
+            <span class="control-value" id="delayVal">1.2s</span>
+          </div>
+          <input type="range" id="delaySlider" min="0" max="5.0" step="0.1" value="1.2">
+        </div>
+
+        <div class="control-item">
+          <div class="control-header">
+            <span>Speaking Speed (Rate)</span>
+            <span class="control-value" id="rateVal">1.0x</span>
+          </div>
+          <input type="range" id="rateSlider" min="0.5" max="4.0" step="0.1" value="1.0">
+        </div>
+
+        <div class="control-item">
+          <div class="control-header">
+            <span>Voice Engine</span>
+          </div>
+          <select id="engineSelect">
+            <option value="device">Identified local device voice (default)</option>
+            <option value="silent">No voice: timed advance only</option>
+            <option value="remote">Remote TTS server (optional)</option>
+          </select>
+        </div>
+
+        <div class="control-item" id="deviceVoiceGroup">
+          <div class="control-header">
+            <span>System Voice</span>
+          </div>
+          <select id="voiceSelect"></select>
+          <div class="control-note" id="voiceNote"></div>
+        </div>
+      </div>
+
+
+      <!-- Optional remote TTS drawer, wired by tts-remote.js -->
+      <div class="remote-panel hidden" id="remotePanel">
+        <div class="remote-panel-title">
+          <span>Remote TTS Configuration</span>
+          <span class="remote-panel-hint">Any OpenAI-compatible speech endpoint: Kokoro, Piper, LocalAI, your own server, or OpenAI</span>
+        </div>
+        <div class="remote-warning" id="remoteWarning"></div>
+        <div class="remote-grid">
+          <div class="control-item">
+            <div class="control-header">
+              <span>Endpoint Base URL</span>
+              <button type="button" class="btn-tiny" id="remoteLocalPreset" title="Fill http://localhost:8000/v1">Localhost</button>
+            </div>
+            <input type="text" id="remoteEndpoint" placeholder="https://api.openai.com/v1" value="https://api.openai.com/v1">
+          </div>
+
+          <div class="control-item">
+            <div class="control-header">
+              <span>API Key</span>
+              <span class="control-value small">memory only</span>
+            </div>
+            <input type="password" id="remoteApiKey" placeholder="sk-... (never saved by this app)" autocomplete="off" spellcheck="false">
+          </div>
+
+          <div class="control-item">
+            <div class="control-header">
+              <span>Model</span>
+            </div>
+            <input type="text" id="remoteModel" placeholder="tts-1, kokoro, piper..." value="tts-1">
+          </div>
+
+          <div class="control-item">
+            <div class="control-header">
+              <span>Voice</span>
+            </div>
+            <input type="text" id="remoteVoice" placeholder="alloy, echo, fable, onyx..." value="alloy">
+          </div>
+        </div>
+        <div class="remote-actions">
+          <button type="button" class="btn-secondary" id="remoteTestBtn">&#9654; Test Voice Connection</button>
+          <span class="test-feedback" id="remoteFeedback"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Word list explorer -->
+    <div class="card">
+      <div class="list-header">
+        <span class="list-title">Word List</span>
+        <button id="scrollCurrentBtn" class="btn-inline">Scroll to Current</button>
+      </div>
+      <div class="words-container" id="wordsContainer"></div>
+    </div>
+
+    <p class="settings-note">List position, delay, rate, local voice, engine preference, and remote endpoint/model/voice may be saved in this browser. Position is not coverage. Remote mode requires selection again after reopening. API keys stay in page memory; browser extensions or password managers are outside this app's control.</p>
+
+    <!-- Shortcuts hint -->
+    <div class="shortcuts-hint">
+      Shortcuts: <kbd>Space</kbd> Play/Pause &bull; <kbd>&larr;</kbd> Previous &bull; <kbd>&rarr;</kbd> Next &bull; <kbd>R</kbd> Repeat Current &bull; <kbd>Home</kbd> First Word
+    </div>
+
+  </div>
+
+  <script src="words.js"></script>
+  <script src="sha256.js"></script>
+  <script src="tts-remote.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+

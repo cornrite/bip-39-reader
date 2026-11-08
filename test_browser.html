@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BIP-39 browser regressions</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="container">
+    <h1>Browser regressions</h1>
+    <p>Runs the real scripts with mocked speech, storage, remote responses, and audio. No TTS service
+      is contacted. Do not enter credentials. Open the console for failure details.</p>
+    <p id="testSummary" role="status">Running…</p>
+    <ol id="testResults"></ol>
+    <div id="testFrames" class="hidden"></div>
+  </main>
+  <script src="words.js"></script>
+  <script src="sha256.js"></script>
+  <script src="test_browser.js"></script>
+</body>
+</html>

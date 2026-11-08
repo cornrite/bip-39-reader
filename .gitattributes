@@ -1,0 +1,11 @@
+# Keep the canonical word list and its generated copy byte-identical to upstream
+# on every platform. The verifier hashes raw bytes, so line endings matter.
+*.txt text eol=lf
+words.js text eol=lf
+
+# Do not let Git mangle line endings in documentation or scripts either.
+*.md text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
